@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environments
+.env
+.venv/
+.venv*/
+ENV/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Mypy/Pylint
+.mypy_cache/
+.pylint.d/
+
+# Logs
+logs/
+*.log
+
+# Reports
+reports/
+
+# Docker
+**/docker-data/
+
+# Misc
+*.swp
+*.swo
