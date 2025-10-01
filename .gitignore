@@ -16,7 +16,6 @@ ENV/
 venv/
 
 # IDE
-.vscode/
 .idea/
 
 # OS
@@ -44,3 +43,7 @@ reports/
 # Misc
 *.swp
 *.swo
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
