@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional, Literal
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -8,6 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.api.deps import DBDep, rate_limit_dep
 from app.utils.auth import api_key_auth
 from app.models.book import BookPublic, PaginatedBooks
+from app.utils.text import normalize_category
 
 router = APIRouter(
     prefix="/books",
@@ -35,7 +37,12 @@ async def list_books(
 ):
     q: dict = {}
     if category:
-        q["category"] = category
+        norm = normalize_category(category)
+        # Prefer exact match on normalized field; include legacy case-insensitive category fallback
+        q["$or"] = [
+            {"category_norm": norm},
+            {"category": {"$regex": f"^{re.escape(category)}$", "$options": "i"}},
+        ]
     price_field = "price_incl_tax"
     price_cond: dict = {}
     if min_price is not None:

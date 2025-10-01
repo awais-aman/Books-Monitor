@@ -10,6 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.config.settings import settings
 from app.models.change import ChangeLog, FieldDiff
 from app.utils.hashing import content_hash
+from app.utils.text import normalize_category
 from app.utils.http_client import fetch_text, get_http_client
 from app.utils.time import now_utc
 from .parser import parse_category_links, parse_listing_page, parse_book_detail
@@ -66,15 +67,17 @@ async def _process_book(url: str, db: AsyncIOMotorDatabase, sem: asyncio.Semapho
 
             parsed["in_stock"] = bool((parsed.get("availability") or 0) > 0)
             parsed["currency"] = "GBP"  # site uses this currency
+            # normalized category (lower-case) for stable filtering and hashing
+            parsed["category_norm"] = normalize_category(parsed.get("category"))
 
-            h = content_hash(parsed)
+            h_new = content_hash(parsed)
             now = now_utc()
 
             existing = await db["books"].find_one({"upc": parsed["upc"]})
             if not existing:
                 doc = {
                     **parsed,
-                    "content_hash": h,
+                    "content_hash": h_new,
                     "raw_html": html,
                     "first_seen": now,
                     "last_seen": now,
@@ -87,14 +90,17 @@ async def _process_book(url: str, db: AsyncIOMotorDatabase, sem: asyncio.Semapho
                 )
                 return url, "inserted"
             else:
-                if existing.get("content_hash") != h:
+                existing_hash = existing.get("content_hash")
+                # Compute the canonical hash for the existing document using the new scheme (migration-friendly)
+                h_existing_current = content_hash(existing)
+                if h_existing_current != h_new:
                     diffs = _diff(existing, parsed)
                     await db["books"].update_one(
                         {"_id": existing["_id"]},
                         {
                             "$set": {
                                 **parsed,
-                                "content_hash": h,
+                                "content_hash": h_new,
                                 "raw_html": html,
                                 "last_seen": now,
                                 "crawl_timestamp": now,
@@ -107,10 +113,15 @@ async def _process_book(url: str, db: AsyncIOMotorDatabase, sem: asyncio.Semapho
                     )
                     return url, "updated"
                 else:
-                    await db["books"].update_one(
-                        {"_id": existing["_id"]},
-                        {"$set": {"last_seen": now, "crawl_timestamp": now, "last_status": "unchanged"}},
-                    )
+                    # unchanged: ensure category_norm is set, and migrate content_hash to new scheme
+                    set_fields = {
+                        "last_seen": now,
+                        "crawl_timestamp": now,
+                        "last_status": "unchanged",
+                        "category_norm": parsed.get("category_norm"),
+                        "content_hash": h_new,
+                    }
+                    await db["books"].update_one({"_id": existing["_id"]}, {"$set": set_fields})
                     return url, "unchanged"
         finally:
             await client.aclose()

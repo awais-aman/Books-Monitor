@@ -16,10 +16,12 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await books.create_index("upc", unique=True)
     await books.create_index("source_url", unique=True)
     await books.create_index("category")
+    await books.create_index("category_norm")
     await books.create_index("rating")
     await books.create_index("price_incl_tax")
     await books.create_index("last_seen")
     await books.create_index([("category", 1), ("price_incl_tax", 1), ("rating", -1)])
+    await books.create_index([("category_norm", 1), ("price_incl_tax", 1), ("rating", -1)])
     # hashed index on content_hash for quick change lookups
     await books.create_index([("content_hash", "hashed")])
 
@@ -29,6 +31,21 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await changes.create_index("change_type")
 
     logger.info("MongoDB indexes ensured")
+
+    # Backfill category_norm
+    try:
+        await books.update_many(
+            {"$or": [{"category_norm": {"$exists": False}}, {"category_norm": None}]},
+            [
+                {
+                    "$set": {
+                        "category_norm": {"$toLower": {"$ifNull": ["$category", None]}},
+                    }
+                }
+            ],
+        )
+    except Exception:
+        pass
 
     # Locks TTL index
     try:

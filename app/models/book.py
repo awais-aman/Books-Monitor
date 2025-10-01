@@ -11,6 +11,7 @@ class Book(BaseModel):
     name: str
     description: Optional[str] = None
     category: Optional[str] = None
+    category_norm: Optional[str] = None
     price_excl_tax: Optional[float] = None
     price_incl_tax: Optional[float] = None
     availability: Optional[int] = 0
@@ -36,6 +37,7 @@ class BookPublic(BaseModel):
     name: str
     description: Optional[str] = None
     category: Optional[str] = None
+    category_norm: Optional[str] = None
     price_excl_tax: Optional[float] = None
     price_incl_tax: Optional[float] = None
     availability: Optional[int] = 0
