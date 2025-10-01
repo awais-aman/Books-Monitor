@@ -13,7 +13,7 @@ This project crawls the demo site https://books.toscrape.com, detects changes da
 
 ## Tech Stack
 
-- Python 3.11+
+- Python 3.10+
 - FastAPI, Uvicorn
 - Motor (MongoDB async driver)
 - httpx (async HTTP)
@@ -54,17 +54,41 @@ docker compose up -d mongo
 uvicorn app.api.main:app --reload --port 8000
 ```
 
-6. Run a one-off crawl
+## Configuration (.env)
+
+Copy `.env.example` to `.env` and adjust as needed:
 
 ```
-python -m app.crawler.runner
+# Mongo
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=books_monitor
+
+# Crawl behavior
+BASE_URL=https://books.toscrape.com
+CONCURRENCY=12
+REQUEST_TIMEOUT=20
+MAX_RETRIES=3
+USER_AGENT="BooksMonitorBot/1.0 (+https://example.com/bot)"
+
+# API security & limits
+API_KEYS=dev-key-1
+RATE_LIMIT_PER_HOUR=100
+
+# Scheduler
+RUN_SCHEDULER_IN_API=true
+SCHEDULER_CRON="0 2 * * *"           # use daily cron OR set interval below
+SCHEDULER_INTERVAL_SECONDS=
+SCHEDULER_RUN_ON_START=true           # run first job immediately on startup
+
+# Logging & reports
+LOG_LEVEL=INFO
+LOGS_DIR=logs
+REPORT_DIR=reports
 ```
 
-7. Run the scheduler
-
-```
-python -m app.scheduler.main
-```
+Notes:
+- On API startup, we ensure MongoDB indexes and backfill `category_norm` (lower-case of `category`) for existing documents to stabilize filtering and hashing.
+- The scheduler can run embedded in the API (default) or as a separate process via `python -m app.scheduler.main`.
 
 ## API
 
@@ -74,9 +98,19 @@ python -m app.scheduler.main
 
 ### Endpoints
 
-- GET `/books` with filters: `category`, `min_price`, `max_price`, `rating`, `sort_by` in {`rating`, `price`, `reviews`}, `order` in {`asc`, `desc`}, pagination `page`, `page_size`.
-- GET `/books/{book_id}` where `book_id` = UPC.
-- GET `/changes` with optional filters.
+- GET `/books`
+  - Query params:
+    - `category`: case-insensitive. Internally matches `category_norm` (lower-case) and also legacy `category` case-insensitively.
+    - `min_price`, `max_price`
+    - `rating` (0–5)
+    - `sort_by` in {`rating`, `price`, `reviews`} and `order` in {`asc`, `desc`}
+    - `page`, `page_size`
+  - Response: `PaginatedBooks { total, page, page_size, items[] }` where items are `BookPublic` (no `raw_html`, no `content_hash`).
+- GET `/books/{book_id}` where `book_id` = UPC
+  - Query param: `include_raw=true` to include `raw_html` and `content_hash` in the JSON response (used for debugging/diffing).
+- GET `/changes`
+  - Query params: `since` (ISO 8601), `type` in {`new`, `update`}, `limit`, `offset`
+  - Tip: if you add a timezone offset (e.g., `+00:00`), URL-encode the plus sign as `%2B`. The server also tolerates accidental spaces instead of `+`.
 
 ## Folder Structure
 
@@ -124,6 +158,7 @@ tests/
   "name": "A Light in the Attic",
   "description": "...",
   "category": "Poetry",
+  "category_norm": "poetry",
   "price_excl_tax": 51.77,
   "price_incl_tax": 51.77,
   "availability": 22,
@@ -154,15 +189,18 @@ tests/
 
 ## Testing
 
+Run unit tests offline (no real Mongo or network calls). We use an in-memory fake Motor DB and disable the scheduler during tests.
+
 ```
 pytest -q
 ```
 
+With coverage:
+
+```
+pytest -q --cov=app --cov=tests --cov-report=term-missing
+```
+
 ## Security Notes
 
-- Keep API keys secret. Do not commit `.env`.
-- In production, use a real rate limiter backed by Redis and reverse proxy protections.
-
-## License
-
-MIT
+- Keep API keys secret in `env`.
