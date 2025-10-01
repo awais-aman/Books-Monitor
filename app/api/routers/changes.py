@@ -25,14 +25,21 @@ router = APIRouter(
 )
 async def list_changes(
     db: AsyncIOMotorDatabase = DBDep,
-    since: Optional[datetime] = Query(default=None, description="Only return changes at or after this timestamp (ISO 8601)."),
+    since: Optional[str] = Query(default=None, description="Only return changes at or after this timestamp (ISO 8601)."),
     type: Optional[Literal["new", "update"]] = Query(default=None, alias="type", description="Filter by change type."),
     limit: int = Query(default=100, ge=1, le=500, description="Max number of items to return."),
     offset: int = Query(default=0, ge=0, description="Number of items to skip (for pagination)."),
 ):
     q: dict = {}
     if since is not None:
-        q["timestamp"] = {"$gte": since}
+        s = since.strip().replace(" ", "+")
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(s)
+            q["timestamp"] = {"$gte": dt}
+        except ValueError:
+            pass
     if type is not None:
         q["change_type"] = type
 

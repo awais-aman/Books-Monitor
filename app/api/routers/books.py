@@ -4,6 +4,7 @@ from typing import Optional, Literal
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import ORJSONResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.api.deps import DBDep, rate_limit_dep
@@ -90,4 +91,6 @@ async def get_book(
     doc = await db["books"].find_one({"upc": book_id}, projection=projection)
     if not doc:
         raise HTTPException(status_code=404, detail="Book not found")
+    if include_raw:
+        return ORJSONResponse(content=doc)
     return BookPublic(**doc)
